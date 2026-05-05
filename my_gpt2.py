@@ -350,7 +350,7 @@ model = GPT(GPTConfig(vocab_size=50304))
 model.to(device)
 # this line actually makes the model not run fast on my 4070 super
 # WAYYY TOO MUCH OVERHEAD SUPER BAD LOL i thought my computer died
-#model = torch.compile(model, mode="reduce-overhead")
+model = torch.compile(model)
 #logits, loss = model(x, y)
 
 
