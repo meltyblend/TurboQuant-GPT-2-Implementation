@@ -352,7 +352,7 @@ if torch.cuda.is_available():
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 total_batch_size = 524288 # 2**19 ~ 0.5m in number of tokens
-B = 16 # micro batch size
+B = 32 # micro batch size
 T = 1024 # sequence length
 assert total_batch_size % (B * T) == 0, "total_batch_size must be divisible by B(batch_size) * T(context_length)"
 grad_accum_steps = total_batch_size // (B * T)
@@ -383,7 +383,7 @@ model.to(device)
 raw_model = model
 # this line actually makes the model not run fast on my 4070 super
 # WAYYY TOO MUCH OVERHEAD SUPER BAD LOL i thought my computer died
-model = torch.compile(model)
+model = torch.compile(model, mode="max-autotune")
 #logits, loss = model(x, y)
 
 
@@ -422,7 +422,7 @@ with open(log_file, "w") as f: # open for writing to clear the file
 for step in range(max_steps):
     last_step = (step == max_steps - 1)
     t0 = time.time()
-    if step % 100 == 0:
+    if step % 500 == 0:
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -451,7 +451,7 @@ for step in range(max_steps):
 
 
     # once in a while evaluate hellaswag
-    if (step % 250 == 0 or last_step) and (not use_compile):
+    if (step % 1000 == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
         for i, example in enumerate(iterate_examples("val")):
