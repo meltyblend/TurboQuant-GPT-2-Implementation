@@ -318,6 +318,10 @@ print(f"using device: {device}")
 ddp = False
 master_process = True
 raw_model = None  # will be set after model is created
+use_compile = False
+device_type = "cuda"
+ddp_rank = 0
+ddp_world_size = 1
 
 torch.manual_seed(1337)
 if torch.cuda.is_available():
