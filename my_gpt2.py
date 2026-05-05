@@ -420,6 +420,7 @@ with open(log_file, "w") as f: # open for writing to clear the file
     pass
 
 for step in range(max_steps):
+    last_step = (step == max_steps - 1)
     t0 = time.time()
     if step % 100 == 0:
         model.eval()
