@@ -251,6 +251,7 @@ class GPT(nn.Module):
 #----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 import tiktoken
+from hellaswag import iterate_examples, render_example, get_most_likely_row
 
 def load_tokens(filename):
     npt = np.load(filename)
