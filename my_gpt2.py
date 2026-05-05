@@ -128,6 +128,9 @@ class GPT(nn.Module):
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
+            # typically the std is 1/sqrt(n_embd), so we scale it down to 0.02
+            # this is the default init scheme used in GPT-2
+            # which is actually consist with the neighbor hood of std ofd_model 1/sqrt(768), 1/sqrt(1600), ... etc.
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
