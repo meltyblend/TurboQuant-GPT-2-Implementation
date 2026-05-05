@@ -356,7 +356,7 @@ model.to(device)
 raw_model = model
 # this line actually makes the model not run fast on my 4070 super
 # WAYYY TOO MUCH OVERHEAD SUPER BAD LOL i thought my computer died
-model = torch.compile(model)
+#model = torch.compile(model)
 #logits, loss = model(x, y)
 
 
@@ -384,6 +384,13 @@ def get_lr(it):
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=6e-4, device_type=device)
+
+# create the log directory we will write checkpoints to and log to
+log_dir = "log"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, f"log.txt")
+with open(log_file, "w") as f: # open for writing to clear the file
+    pass
 
 for step in range(max_steps):
     t0 = time.time()
@@ -415,6 +422,67 @@ for step in range(max_steps):
                     torch.save(checkpoint, checkpoint_path)
 
 
+    # once in a while evaluate hellaswag
+    if (step % 250 == 0 or last_step) and (not use_compile):
+        num_correct_norm = 0
+        num_total = 0
+        for i, example in enumerate(iterate_examples("val")):
+            if i % ddp_world_size != ddp_rank:
+                continue
+            # render the example into tokens and labels
+            _, tokens, mask, label = render_example(example)
+            tokens = tokens.to(device)
+            mask = mask.to(device)
+            # get the logits
+            with torch.no_grad():
+                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+                    logits, loss = model(tokens)
+                pred_norm = get_most_likely_row(tokens, mask, logits)
+            num_total += 1
+            num_correct_norm += int(pred_norm == label)
+        # reduce the stats across all processes
+        if ddp:
+            num_total = torch.tensor(num_total, dtype=torch.long, device=device)
+            num_correct_norm = torch.tensor(num_correct_norm, dtype=torch.long, device=device)
+            dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
+            dist.all_reduce(num_correct_norm, op=dist.ReduceOp.SUM)
+            num_total = num_total.item()
+            num_correct_norm = num_correct_norm.item()
+        acc_norm = num_correct_norm / num_total
+        if master_process:
+            print(f"HellaSwag accuracy: {num_correct_norm}/{num_total}={acc_norm:.4f}")
+            with open(log_file, "a") as f:
+                f.write(f"{step} hella {acc_norm:.4f}\n")
+
+    # once in a while generate from the model (except step 0, which is noise)
+    if ((step > 0 and step % 250 == 0) or last_step) and (not use_compile):
+        model.eval()
+        num_return_sequences = 4
+        max_length = 32
+        tokens = enc.encode("Hello, I'm a language model,")
+        tokens = torch.tensor(tokens, dtype=torch.long)
+        tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
+        xgen = tokens.to(device)
+        sample_rng = torch.Generator(device=device)
+        sample_rng.manual_seed(42 + ddp_rank)
+        while xgen.size(1) < max_length:
+            with torch.no_grad():
+                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+                    logits, loss = model(xgen) # (B, T, vocab_size)
+                logits = logits[:, -1, :] # (B, vocab_size)
+                probs = F.softmax(logits, dim=-1)
+                topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+                ix = torch.multinomial(topk_probs, 1, generator=sample_rng) # (B, 1)
+                xcol = torch.gather(topk_indices, -1, ix) # (B, 1)
+                xgen = torch.cat((xgen, xcol), dim=1)
+        # print the generated text
+        for i in range(num_return_sequences):
+            tokens = xgen[i, :max_length].tolist()
+            decoded = enc.decode(tokens)
+            print(f"rank {ddp_rank} sample {i}: {decoded}")
+
+#---------------------------------------------------------------------------------------------------------------------------------------------------------
+
     model.train()
     optimizer.zero_grad()
     loss_accum = 0.0
@@ -443,8 +511,11 @@ for step in range(max_steps):
     t1 = time.time()
     dt = (t1 - t0)  # time in seconds
     tokens_per_sec = (train_loader.B * train_loader.T) / dt
+    tokens_processed = train_loader.B * train_loader.T * grad_accum_steps
     print(f"step {step} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | d_time: {dt:.2f}ms | token/sec: {tokens_per_sec:.2f}")
-
+    if master_process:
+        with open(log_file, "a") as f:
+            f.write(f"{step} train{loss_accum.item():.6f}\n")
 
 
 import sys; sys.exit(0)
