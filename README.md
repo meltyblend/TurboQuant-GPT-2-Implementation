@@ -73,7 +73,7 @@ The script auto-detects CUDA, MPS, or CPU. On a single GPU it runs without modif
 
 ## Hardware
 
-Development is done on a single RTX 4070 Super (12 GB), which is sufficient for the TurboQuant inference work since quantization is applied at decode time on a frozen model. Full pretraining of GPT-2 124M on 10B tokens is impractical at this scale and is run on a remote 8x A100 (80 GB) node via [Lambda Cloud](https://lambda.ai/). Single-GPU training is supported for short sanity-check runs.
+Development is done on a single RTX 4070 Super (12 GB), which is sufficient for the TurboQuant inference work since quantization is applied at decode time on a frozen model. Full pretraining of GPT-2 124M on 10B tokens is impractical at this scale and was ran on a remote a single A100 (40 GB) node via [Lambda Cloud](https://lambda.ai/). Single-GPU training is supported for short sanity-check runs.
 
 ## Roadmap
 
