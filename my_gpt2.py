@@ -46,6 +46,7 @@ class CausalSelfAttention(nn.Module):
         # attention(Q, K, V) = softmax((QK^T / sqrt(d_k))+M)V, M is a causal mask
         # setting negative infinity to the upper triangular part of the attention matrix
         # to prevent the model from attending to future tokens
+        # This is flash attention
         y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
         # merge heads and project back to n_embd
@@ -309,30 +310,69 @@ torch.set_float32_matmul_precision('high')
 
 # getting logits
 #model = GPT.from_pretrained("gpt2")
-model = GPT(GPTConfig())
+#
+# easily divisible by 256 for the flash attention implementation
+# ~14% speed up over the original vocab size on 4070 super
+model = GPT(GPTConfig(vocab_size=50304))
 model.to(device)
+# this line actually makes the model not run fast on my 4070 super
+# WAYYY TOO MUCH OVERHEAD SUPER BAD LOL i thought my computer died
+#model = torch.compile(model, mode="reduce-overhead")
 #logits, loss = model(x, y)
+
+
+
+# cosine decay learning rate scheduler with warmup
+# there are many different learning rate schedulers
+max_lr = 6e-4
+min_lr = max_lr * 0.1
+warmup_steps = 10
+max_steps = 50
+def get_lr(it):
+    #1. linear warmup for warmup_steps
+    if it < warmup_steps:
+        return max_lr * (it + 1) / warmup_steps
+    #2. if it > lr_decay_steps, return min_lr
+    if it > max_steps:
+        return min_lr
+    #3. in between warmup and decay, use cosine decay down to min_lr
+    decay_ratio = (it - warmup_steps) / (max_steps - warmup_steps)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
+    return min_lr + coeff * (max_lr - min_lr)
+
+
 
 # adamW optimizer is an alternative to the stochastic gradient descent optimizer
 # a normalization that happens on each gradient element individually and speeds up optimization
 # optimizes faster than SGD with learning rate=3e-4
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
-for i in range(50):
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-88)
+for step in range(max_steps):
     t0 = time.time()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad()
+
     # makes it so that the forward pass uses bfloat16 precision and the code runs super fast on
     # my 4070 super HOLY MOLY
     with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
         logits, loss = model(x, y)
     loss.backward()
+
+    # clip the gradient norm to prevent exploding gradients
+    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+    # determining learning rate scheduler
+    lr = get_lr(step)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
     optimizer.step()
-    torch.cuda.synchronize()
+    torch.cuda.synchronize() # wait for GPU to finish
     t1 = time.time()
-    dt = (t1 - t0)*1000
-    tokens_per_sec = (train_loader.B * train_loader.T) / (t1-t0)
-    print(f"step {i}, loss: {loss.item()}, time: {dt:.2f}ms, tokens/sec: {tokens_per_sec:.2f}")
+    dt = (t1 - t0)  # time in seconds
+    tokens_per_sec = (train_loader.B * train_loader.T) / dt
+    print(f"step {step} | loss: {loss.item()} | lr: {lr:.4e} | norm: {norm:.4f} | d_time: {dt:.2f}ms | token/sec: {tokens_per_sec:.2f}")
 
 
 
