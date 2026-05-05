@@ -2,3 +2,5 @@ TQGPT-venv/
 __pycache__/
 *.pt
 *.bin
+
+input.txt

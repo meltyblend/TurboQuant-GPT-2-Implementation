@@ -139,6 +139,7 @@ class GPT(nn.Module):
         logits = self.lm_head(x)        #(B, T, vocab_size)
         loss = None
         if targets is not None:
+            # flattening the 3d tensor of logits to 2d (B,T), flattening the targets so they are a single tensor of (B*T)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
 
         return logits, loss
@@ -219,22 +220,87 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
         return optimizer
 
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-num_return_sequences = 5
-max_length = 30
+import tiktoken
 
-model = GPT.from_pretrained("gpt2")
-model.eval()
-model.to('cuda')
+class DataLoaderLite:
+    def __init__(self, B, T):
+        self.B = B
+        self.T = T
+
+        # at initialization load tokens from the input medium and store them in memory
+        with open('input.txt', 'r') as f:
+            text = f.read()
+
+        # tokenizing input/data
+        enc = tiktoken.get_encoding('gpt2')
+        tokens = enc.encode(text)
+        self.tokens = torch.tensor(tokens)
+
+        print(f"loaded {len(self.tokens)} tokens")
+        print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
+
+        # state
+        self.current_position = 0
+
+    def next_batch(self):
+        B, T = self.B, self.T
+        buf = self.tokens[self.current_position : self.current_position+B*T + 1]
+        x = (buf[:-1]).view(B,T) # input to our transformer
+        y = (buf[1:]).view(B,T) # target
+
+        # advance the position in the tensor
+        self.current_position += B * T
+
+        # if loading the next batch would be out of bounds, reset
+        if self.current_position + (B * T + 1) > len(self.tokens):
+            self.current_position = 0
+        return x, y
+
+
+#auto detecting my devices
+
+device = "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = "mps"
+print(f"using device: {device}")
+
+train_loader = DataLoaderLite(B=4, T=32)
+
+
+# getting logits
+#model = GPT.from_pretrained("gpt2")
+model = GPT(GPTConfig())
+model.to(device)
+#logits, loss = model(x, y)
+
+# adamW optimizer is an alternative to the stochastic gradient descent optimizer
+# a normalization that happens on each gradient element individually and speeds up optimization
+# optimizes faster than SGD with learning rate=3e-4
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+for i in range(50):
+    x, y = train_loader.next_batch()
+    x, y = x.to(device), y.to(device)
+    optimizer.zero_grad()
+    logits, loss = model(x, y)
+    loss.backward()
+    optimizer.step()
+    print(f"step {i}, loss: {loss.item()}")
+
+
+
+import sys; sys.exit(0)
 
 #prefix tokens
-
 import tiktoken
 enc = tiktoken.get_encoding("gpt2")
 tokens = enc.encode("Hello, I'm a language model,")
 tokens = torch.tensor(tokens, dtype=torch.long)
 tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
-x = tokens.to('cuda')
+x = tokens.to(device)
 
 # generate! x is (B, T) where B = 5 abd T = 8
 torch.manual_seed(42)
