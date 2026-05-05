@@ -117,6 +117,23 @@ class GPT(nn.Module):
         )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False) # "linear part"
 
+        # weight sharing scheme
+        # copying the data from lm_head to wte
+        # left with a single tensor weight shared between wte and lm_head
+        self.transformer.wte.weight = self.lm_head.weight
+
+        # init params
+        # itirates all sub modules and applies _init_weights to each
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
     def forward(self, idx, targets=None):
         # idx is shape (B, T)
         B, T = idx.size()
