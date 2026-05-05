@@ -356,7 +356,7 @@ model.to(device)
 raw_model = model
 # this line actually makes the model not run fast on my 4070 super
 # WAYYY TOO MUCH OVERHEAD SUPER BAD LOL i thought my computer died
-#model = torch.compile(model)
+model = torch.compile(model)
 #logits, loss = model(x, y)
 
 
