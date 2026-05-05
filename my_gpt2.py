@@ -315,6 +315,9 @@ elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
     device = "mps"
 print(f"using device: {device}")
 
+ddp = False
+master_process = True
+raw_model = None  # will be set after model is created
 
 torch.manual_seed(1337)
 if torch.cuda.is_available():
@@ -329,7 +332,9 @@ grad_accum_steps = total_batch_size // (B * T)
 print(f"total desired batch size: {total_batch_size}")
 print(f"=> calculated grad_accum_steps: {grad_accum_steps}")
 
-train_loader = DataLoaderLite(B=B, T=T, process_rank= 0, num_processes = 1, split="train")
+train_loader = DataLoaderLite(B=B, T=T, process_rank = 0, num_processes = 1, split="train")
+val_loader = DataLoaderLite(B=B, T=T, process_rank = 0, num_processes = 1, split="val")
+
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -348,6 +353,7 @@ torch.set_float32_matmul_precision('high')
 # ~14% speed up over the original vocab size on 4070 super
 model = GPT(GPTConfig(vocab_size=50304))
 model.to(device)
+raw_model = model
 # this line actually makes the model not run fast on my 4070 super
 # WAYYY TOO MUCH OVERHEAD SUPER BAD LOL i thought my computer died
 model = torch.compile(model)
@@ -381,6 +387,35 @@ optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=6e-4, dev
 
 for step in range(max_steps):
     t0 = time.time()
+    if step % 100 == 0:
+        model.eval()
+        val_loader.reset()
+        with torch.no_grad():
+            val_loss_accum = 0.0
+            val_loss_steps = 20
+            for _ in range(val_loss_steps):
+                x, y = val_loader.next_batch()
+                x, y = x.to(device), y.to(device)
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    logits, loss = model(x,y)
+                loss = loss / val_loss_steps
+                val_loss_accum += loss.detach()
+            if master_process:
+                print(f"validation loss: {val_loss_accum.item():.4f}")
+                with open(log_file, "a") as f:
+                    f.write(f"{step} val {val_loss_accum.item():.4f}\n")
+                if step > 0 and (step % 5000 == 0 or last_step):
+                    checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
+                    checkpoint = {
+                        'model': raw_model.state_dict(),
+                        'config': raw_model.config,
+                        'step': step,
+                        'val_loss': val_loss_accum.item()
+                    }
+                    torch.save(checkpoint, checkpoint_path)
+
+
+    model.train()
     optimizer.zero_grad()
     loss_accum = 0.0
 
