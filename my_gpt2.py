@@ -538,9 +538,9 @@ for step in range(max_steps):
     torch.cuda.synchronize() # wait for GPU to finish
     t1 = time.time()
     dt = (t1 - t0)  # time in seconds
-    tokens_per_sec = (train_loader.B * train_loader.T) / dt
+    tokens_per_sec = (train_loader.B * train_loader.T * grad_accum_steps) / dt
     tokens_processed = train_loader.B * train_loader.T * grad_accum_steps
-    print(f"step {step} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | d_time: {dt:.2f}ms | token/sec: {tokens_per_sec:.2f}")
+    print(f"step {step} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | d_time: {dt:.2f}seconds | token/sec: {tokens_per_sec:.2f}")
     if master_process:
         with open(log_file, "a") as f:
             f.write(f"{step} train{loss_accum.item():.6f}\n")
