@@ -35,9 +35,11 @@ class CausalSelfAttention(nn.Module):
         # e.g. in GPT-2 (124M), n_head=12, hs=64, so nh*hs=C=768 channels in the Transformer
         # directly from Andrej Karpathy's GPT-2 implementation comments
 
+#____________________________________________________________________________________________________________________
 
         # currently we do not have KV-Cache and we must implement one in order to get started on implementing
         # our version of TurboQuant
+#____________________________________________________________________________________________________________________
 
         qkv = self.c_attn(x) # tensor of shape (B, T, 3 * n_embd)
 
