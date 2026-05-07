@@ -84,8 +84,9 @@ To start training and evaluation on a single GPU:
 python my_gpt2.py
 ```
 
-The script auto-detects CUDA, MPS, or CPU. On a single GPU it runs without modification. Periodic validation loss, HellaSwag accuracy, and generation samples are logged to `log/log.txt`, and checkpoints are saved every 5,000 steps.
+The script auto-detects CUDA, MPS, or CPU. On a single GPU it runs without modification*. Periodic validation loss, HellaSwag accuracy, and generation samples are logged to `log/log.txt`, and checkpoints are saved every 5,000 steps.
 
+*I have only tested this code on Nvidia GPU's*
 ---
 
 ## Hardware
