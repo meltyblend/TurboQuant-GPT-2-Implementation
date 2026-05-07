@@ -109,9 +109,9 @@ Development is done on a single RTX 4070 Super (12 GB), which is sufficient for 
 | 5     | QJL 1-bit KV cache                  | Planned     |
 | 6     | End-to-end ablation report          | Planned     |
 
-Planned measurements include how well the model predicts text, how often it picks the right answer on HellaSwag, and how much KV cache memory it uses at different compression levels, all compared to a standard bf16 setup.
----
+Planned measurements include how well the model predicts text, how often it picks the correct answer on HellaSwag, and how much KV cache memory it uses at different compression levels compared to the standard bf16 setup.
 
+--- 
 ## References
 
 **Foundations**
