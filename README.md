@@ -142,7 +142,3 @@ Planned measurements include how well the model predicts text, how often it pick
   https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu  
 - *Lambda Cloud GPU*.  
   https://lambda.ai/  
-
----
-
-To “download” it, save this text as `README.md` in your project folder, or replace your existing `README.md` with this version.
