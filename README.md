@@ -16,7 +16,6 @@ KV cache memory is the dominant cost of long-context LLM inference. Storing the 
 2. A Lloyd-Max scalar codebook fit to the rotated distribution, replacing uniform quantization for a strict accuracy gain at the same bit-width.
 3. A quantized Johnson-Lindenstrauss transform (QJL) for the 1-bit regime, where sign-bit encoding is debiased through an asymmetric inner-product estimator.
 
-This repository implements the pipeline against a self-contained GPT-2 model rather than treating it as a black-box library, so every tensor of interest is observable and modifiable.
 
 ---
 
